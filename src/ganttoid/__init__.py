@@ -30,6 +30,17 @@ def create_top_down_hierarchy(tasks):
                 children = []
                 map[task.parent] = children
             children.append(task.id)
+            
+    # sort the children by orderindex
+    def key_extractor(x):
+        return tasks[key].orderindex
+                    
+    for key in map:
+        children = map.get(key)
+        if children:
+            children = sorted(children, key=key_extractor)
+            map[key] = children
+        
     return map
 
 
@@ -49,18 +60,45 @@ def get_leaves(hierarchy, tasks):
 def create_durations_map(tasks):
     durations = {}
     for task in tasks:
-        durations[task.id] = task.time_estimate
+        durations[task.id] = task.time_estimate if task.time_estimate is not None else 0
     return durations
 
 
+# FIXME: This method creates a cycle. We want to have children of a parent to have all its parent's 
+# predecessors as its own predecessors. But on the other hand, we want a parent to have all its subtasks
+# as predecessors. That way, subtasks will end up as their own predecessors.
+# The solution would be to add all the parent's predecessors *except* the subtask itself and its siblings,
+# but how do we know what the siblings are?
+# Other solution: Dump all the "smart" logic and have the user set the correct dependencies by hand.
 def get_predecessors(tasks):
+    predecessors = {}
+    hierarchy = create_top_down_hierarchy(tasks)
+    parents = create_bottom_up_hierarchy(tasks)
+    for key in tasks:
+        task = tasks[key]
+        deps = [ d["depends_on"] for d in task.dependencies if d["task_id"] == key ]
+        predecessors[key] = deps
+        # if a task has subtasks, make it dependent on all of them
+        subtasks = (hierarchy.get(key) if hierarchy.get(key) else [])
+        predecessors[key] += subtasks
+    for key in tasks:
+        task = tasks[key]
+        deps = predecessors[key]
+        # if a task has a parent, make it dependent on all of its parent's predecessors        
+        siblings = [ sibling for sibling in parents if parents[sibling] == parents[key] ]
+        if parents.get(key):
+            deps += [ pred for pred in predecessors[parents.get(key)] if pred not in siblings ]
+    return predecessors
+    
+    
+def get_successors(tasks):
     plan = {}
     for task in tasks:
-        deps = [ d["depends_on"] for d in task.dependencies if d["task_id"] == task.id ]
+        deps = [ d["task_id"] for d in task.dependencies if d["depends_on"] == task.id ]
         plan[task.id] = deps
     return plan
-    
-    
+
+
 def get_successors(tasks):
     plan = {}
     for task in tasks:
@@ -72,29 +110,8 @@ def get_successors(tasks):
 def validate_durations(durations, tasks):
     for d in durations:
         if durations[d] is None:
-            raise ValueError(f"Task '{tasks[d].name}' has no time estimate.")
-
-
-def calculate_durations(durations, tasks):
-    hierarchy = create_top_down_hierarchy(tasks)
-    parents = create_bottom_up_hierarchy(tasks)
-    leaves = get_leaves(hierarchy, tasks)
-    calculated_durations = {}
-    for leaf in leaves:
-        calculated_durations[leaf] = durations[leaf]
-    while leaves:
-        leaf = leaves.pop(0)
-        d = calculated_durations.get(leaf)
-        if not d:
-            raise ValueError(f"Task '{tasks[d].name}' has no time estimate.")
-        parent = parents[leaf]
-        if parent:
-            pd = calculated_durations.get(parent) if calculated_durations.get(parent) else 0
-            pd += d
-            calculated_durations[parent] = pd
-            leaves.append(parent)
-    return calculated_durations    
-
+            raise ValueError(f"Task '{tasks[d].name}' has no time estimate.")   
+    
 
 def get_trade(tasks, key):
     task = tasks[key]
@@ -106,6 +123,23 @@ def get_trade(tasks, key):
     else:
         return None
         
+        
+def get_trades(tasks):
+    trades = {}
+    for key in tasks:
+        trades[key] = get_trade(tasks, key)
+    return trades
+
+
+def group_by_trade(tasks, trades):
+    grouped = {}
+    for key in tasks:
+        trade = trades[key]
+        if trade not in grouped:
+            grouped[trade] = []
+        grouped[trade].append(key)
+    return grouped        
+    
 
 def ganttoid():
     config = get_config()
@@ -135,19 +169,19 @@ def ganttoid():
     all_tasks = lists[0].get_all_tasks(subtasks=True)
 
     tasks = create_task_map(all_tasks)
-    predecessors = get_predecessors(all_tasks)
+    predecessors = get_predecessors(tasks)
     successors = get_successors(all_tasks)
     durations = create_durations_map(all_tasks)
-    
-    durations = calculate_durations(durations, tasks)
-    
-    start_dates, end_dates = scheduling.determine_latest(datetime(2024, 6, 30, 16, 0), predecessors, successors, durations)
+    trades = get_trades(tasks)
+       
+    start_dates, end_dates = scheduling.determine_latest(datetime(2024, 6, 30, 16, 0), predecessors, successors, durations, trades)
 
+    print("ID;Name;Übergeordnet;Spätester Start;Sequenz;Spätestes Ende;Gewerk;Vorgänger;Nachfolger")
     for key in tasks:
         task = tasks[key]
         trade = get_trade(tasks, key)
         parent_name = tasks[task.parent].name if task.parent else None 
-        print(f"{task.id};{task.name};{parent_name};{start_dates.get(key)};{end_dates.get(key)};{trade};{predecessors[key]};{successors[key]}")
+        print(f"{task.id};{task.name};{parent_name};{start_dates.get(key)};{task.orderindex};{end_dates.get(key)};{trade};{predecessors[key]};{successors[key]}")
 #        task.start_date = start_dates[key]
 #        task.due_date = end_dates[key]
 #        clickup.post(task.url, data=task)

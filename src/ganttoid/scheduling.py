@@ -20,25 +20,28 @@ def subtract(base_date, duration):
 
 def is_after(before, after):
     return (before - after).total_seconds() < 0
-    
 
-def determine_latest(end_date, predecessors, successors, durations):
+
+def determine_latest(end_date, predecessors, successors, durations, trades):
     
     start_dates = {}
     end_dates = {}
     
-    def calculate_dates(entry, date):
+    def calculate_dates(entry, date, path):
+        if entry in path:
+            raise ValueError(f"Error, cycle detected: {'->'.join(path)}->{entry}")
+        path.append(entry)
         if end_dates.get(entry) and is_after(end_dates[entry], date):
             return
         end_dates[entry] = date
         start_dates[entry] = subtract(date, durations[entry])
         for predecessor in predecessors[entry]:
-            calculate_dates(predecessor, start_dates[entry])
+            calculate_dates(predecessor, start_dates[entry], path[:])
     
     # tasks that don't have a successor
     end_points = get_end_points(successors)
     
     for endpoint in end_points:
-        calculate_dates(endpoint, end_date)
+        calculate_dates(endpoint, end_date, [])
         
     return start_dates, end_dates
