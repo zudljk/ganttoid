@@ -1,4 +1,5 @@
 from datetime import datetime, date, time, timedelta
+from .task import Task
 
 WORKDAY_MILLIS = 8 * 60 * 60 * 1000 
 WORKDAY_START= time(8,0,0)
@@ -45,3 +46,33 @@ def determine_latest(end_date, predecessors, successors, durations, trades):
         calculate_dates(endpoint, end_date, [])
         
     return start_dates, end_dates
+
+
+def print_cycle_stack(path):
+    for i in reversed(path):
+        task = Task.all_tasks[i]
+        parent = f"{task.get_parent().name} / " if task.get_parent() else ""
+        print(f"{parent}{task.name} -> ")
+
+
+def determine_latest2(end_date, tasks):
+    
+    def calculate_start_end_date(task, date, path):
+        if task.id in path:
+            print_cycle_stack(path+[task.id])
+            raise ValueError(f"Error, cycle detected: {'->'.join(path)}->{task.id}")
+        path.append(task.id)
+        
+        if task.latest_end and is_after(task.latest_end, date):
+            return
+        
+        task.latest_start = subtract(date, task.get_duration())
+        task.latest_end = date
+        
+        for predecessor in task.get_predecessors():
+            calculate_start_end_date(predecessor, task.latest_start, path[:])
+        
+    end_points = Task.get_endpoints()
+    
+    for endpoint in end_points:
+        calculate_start_end_date(endpoint, end_date, [])
