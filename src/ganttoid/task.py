@@ -1,3 +1,5 @@
+from datetime import datetime
+
 class Task:
     
     all_tasks = {}
@@ -61,7 +63,7 @@ class Task:
     
     def get_siblings(self):
         if not self.get_parent():
-            return []
+            return sorted([ sibling for sibling in Task.all_tasks.values() if sibling.get_parent() is None ], key=lambda x: x.get_sequence())
         return sorted([ sibling for sibling in self.get_parent().get_children() if sibling.id != self.id ], key=lambda x: x.get_sequence())
     
     
@@ -107,5 +109,14 @@ class Task:
         return sorted(list(dict.fromkeys(predecessors)), key=lambda x: x.get_sequence())
     
     
+    def create_commit(self):
+        return {
+            "start_date_time": True,                                         
+            "due_date_time": True,                 
+            "start_date": datetime.timestamp(self.get_latest_start()) * 1000,
+            "due_date": datetime.timestamp(self.get_latest_end()) * 1000
+        }
+    
     def get_endpoints():
         return [ task for task in Task.all_tasks.values() if not task.get_successors() ]
+
