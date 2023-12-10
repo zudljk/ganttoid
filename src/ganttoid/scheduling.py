@@ -2,7 +2,6 @@ from datetime import datetime, date, time, timedelta
 from .task import Task
 
 WORKDAY_MILLIS = 8 * 60 * 60 * 1000 
-WORKDAY_START= time(8,0,0)
 
 def get_end_points(plan):
     return [ k for k in plan if not plan[k]]
@@ -16,36 +15,13 @@ def subtract(base_date, duration):
         result = result - timedelta(hours=16)
     if result.hour == 16 and result.minute == 0:
         result = result + timedelta(hours=16)
+    while result.weekday() >= 5:
+        result = result - timedelta(days=1)
     return result
     
 
 def is_after(before, after):
     return (before - after).total_seconds() < 0
-
-
-def determine_latest(end_date, predecessors, successors, durations, trades):
-    
-    start_dates = {}
-    end_dates = {}
-    
-    def calculate_dates(entry, date, path):
-        if entry in path:
-            raise ValueError(f"Error, cycle detected: {'->'.join(path)}->{entry}")
-        path.append(entry)
-        if end_dates.get(entry) and is_after(end_dates[entry], date):
-            return
-        end_dates[entry] = date
-        start_dates[entry] = subtract(date, durations[entry])
-        for predecessor in predecessors[entry]:
-            calculate_dates(predecessor, start_dates[entry], path[:])
-    
-    # tasks that don't have a successor
-    end_points = get_end_points(successors)
-    
-    for endpoint in end_points:
-        calculate_dates(endpoint, end_date, [])
-        
-    return start_dates, end_dates
 
 
 def print_cycle_stack(path):
@@ -55,7 +31,7 @@ def print_cycle_stack(path):
         print(f"{parent}{task.name} -> ")
 
 
-def determine_latest2(end_date, tasks):
+def determine_latest(end_date, tasks):
     
     def calculate_start_end_date(task, date, path):
         if task.id in path:
@@ -68,6 +44,8 @@ def determine_latest2(end_date, tasks):
         
         task.latest_start = subtract(date, task.get_duration())
         task.latest_end = date
+        if task.latest_end.hour == 8 and task.latest_end.minute == 0:
+            task.latest_end = task.latest_end - timedelta(hours=16)
         
         for predecessor in task.get_predecessors():
             calculate_start_end_date(predecessor, task.latest_start, path[:])
