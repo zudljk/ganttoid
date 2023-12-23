@@ -33,12 +33,8 @@ def save(task_id, payload, api_key):
         raise IOError(response.reason)
 
 
-def ganttoid():
-    config = get_config()
-    project_name = config.get("project")
-    list_name = config.get("list")
-
-    clickup = ClickUp(config["api_key"])
+def ganttoid(project_name, list_name, api_key):
+    clickup = ClickUp(api_key)
 
     lists = []
     for team in clickup.teams:
@@ -85,11 +81,12 @@ def ganttoid():
         print(
             f"{t.id};{t.name};{t.get_parent_name()};{t.get_latest_start()};{t.get_sequence()};{t.get_latest_end()};{t.get_trade()};{predecessors};{successors}"
         )
-        save(t.id, t.create_commit(), config["api_key"])
+        save(t.id, t.create_commit(), api_key)
 
 
 def main():
-    ganttoid()
+    config = get_config()
+    ganttoid(config.get("project"), config.get("list"), config.get("api_key"))
 
 
 if __name__ == "__main__":
