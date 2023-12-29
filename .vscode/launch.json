@@ -14,6 +14,20 @@
     ],
     "configurations": [
         {
+            "name": "Python: Start by task ID",
+            "type": "python",
+            "request": "launch",
+            "module": "ganttoid.__init__",
+            "args": [
+                "-t",
+                "866b09evn",
+                "-k",
+                "${input:clickup-token}"
+            ],
+            "console": "integratedTerminal",
+            "justMyCode": true
+        },
+        {
             "name": "Python: Test",
             "type": "python",
             "request": "launch",
